@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monopoly Baku Online</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#0a0a1a,#1a1a3e,#0a2a4a);min-height:100vh;color:#fff;overflow-x:hidden}
+
+.screen{display:none;position:fixed;top:0;left:0;width:100%;height:100%;align-items:center;justify-content:center;z-index:9000;background:linear-gradient(135deg,#0a0a1a,#1a1a3e)}
+.screen.active{display:flex}
+.box{background:rgba(255,255,255,.05);border:2px solid #e94560;border-radius:20px;padding:35px;text-align:center;max-width:480px;width:92%;backdrop-filter:blur(10px)}
+.box h1{font-size:2.8rem;background:linear-gradient(45deg,#e94560,#f5a623,#e94560);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.box h2{color:#aaa;font-weight:400;margin-bottom:20px;font-size:1rem}
+.box input,.box select{width:100%;padding:12px;border-radius:10px;border:2px solid #333;background:#0a0a1a;color:#fff;font-size:1rem;margin:6px 0}
+.box input:focus{border-color:#e94560;outline:none}
+.bbtn{padding:14px 40px;border:none;border-radius:25px;font-size:1.1rem;cursor:pointer;font-weight:700;transition:.3s;color:#fff;margin:6px;letter-spacing:1px}
+.bbtn:hover{transform:translateY(-2px)}
+.bbtn.main{background:linear-gradient(45deg,#e94560,#c92a4a);box-shadow:0 4px 20px rgba(233,69,96,.4)}
+.bbtn.sec{background:linear-gradient(45deg,#3498db,#2980b9);box-shadow:0 4px 20px rgba(52,152,219,.4)}
+.bbtn.green{background:linear-gradient(45deg,#27ae60,#2ecc71)}
+.room-code{font-size:2.5rem;color:#f5a623;font-weight:700;letter-spacing:8px;margin:15px 0;font-family:monospace}
+.player-list{text-align:left;margin:15px 0}
+.player-list div{padding:8px 12px;margin:4px 0;background:rgba(255,255,255,.05);border-radius:8px;display:flex;align-items:center;gap:10px}
+.player-list .dot{width:16px;height:16px;border-radius:50%;border:2px solid #fff}
+.error-msg{color:#e74c3c;font-size:.9rem;margin-top:10px}
+
+.game-layout{display:flex;gap:12px;padding:8px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1450px;margin:0 auto}
+.game-title{text-align:center;padding:8px}
+.game-title h1{font-size:1.8rem;background:linear-gradient(45deg,#e94560,#f5a623);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.game-title .rc{font-size:.9rem;color:#f5a623;font-family:monospace}
+
+.board{display:grid;grid-template-columns:repeat(11,68px);grid-template-rows:repeat(11,68px);gap:1px;background:#0d1b2a;border:3px solid #e94560;border-radius:8px;box-shadow:0 0 40px rgba(233,69,96,.2)}
+.cell{background:#0b1622;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.48rem;text-align:center;position:relative;cursor:pointer;transition:.2s;padding:2px;overflow:hidden;border:1px solid #162a3a}
+.cell:hover{background:#162a4a;z-index:5}
+.cell .cb{position:absolute;top:0;left:0;right:0;height:6px}
+.cell .ci{font-size:1rem}
+.cell .cn{font-weight:700;font-size:.42rem;line-height:1.1;color:#ddd;margin-top:1px}
+.cell .cp{font-size:.44rem;color:#f5a623}
+.corner{background:#091320;font-weight:700}
+.bcenter{grid-column:2/11;grid-row:2/11;background:#091320;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #162a3a}
+.bcenter h2{font-size:1.6rem;background:linear-gradient(45deg,#e94560,#f5a623);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.tk-area{display:flex;gap:1px;flex-wrap:wrap;justify-content:center;margin-top:1px}
+.tk{width:11px;height:11px;border-radius:50%;border:1.5px solid #fff;font-size:.35rem;display:flex;align-items:center;justify-content:center;font-weight:700;box-shadow:0 0 3px rgba(255,255,255,.5)}
+.odot{position:absolute;bottom:1px;right:1px;width:7px;height:7px;border-radius:50%;border:1px solid #fff;display:none}
+.harea{position:absolute;top:7px;left:1px;display:flex;gap:0;font-size:.4rem}
+
+.panel{display:flex;flex-direction:column;gap:8px;width:330px}
+.pc{background:rgba(255,255,255,.04);border:2px solid #1a2a3a;border-radius:10px;padding:10px;transition:.3s}
+.pc.active{border-color:#e94560;box-shadow:0 0 15px rgba(233,69,96,.25)}
+.pc.you{border-color:#f5a623}
+.pc .ph{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.pc .pt{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;border:2px solid #fff}
+.pc .pn{font-weight:700;font-size:.95rem}
+.pc .pm{font-size:1.2rem;color:#f5a623;font-weight:700}
+.pc .pp{font-size:.6rem;color:#999;margin-top:2px;max-height:35px;overflow-y:auto;line-height:1.3}
+.pc .pj{color:#ff6b6b;font-weight:700;font-size:.65rem}
+
+.dbox{background:rgba(255,255,255,.04);border:2px solid #1a2a3a;border-radius:10px;padding:12px;text-align:center}
+.drow{display:flex;justify-content:center;gap:12px;margin:10px 0}
+.die{width:50px;height:50px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:#1a1a2e;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.die.rolling{animation:rl .4s ease}
+@keyframes rl{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1)}}
+.rbtn{background:linear-gradient(45deg,#e94560,#c92a4a);color:#fff;border:none;padding:10px 30px;font-size:1rem;border-radius:22px;cursor:pointer;font-weight:700;letter-spacing:2px;transition:.3s;box-shadow:0 3px 12px rgba(233,69,96,.4)}
+.rbtn:hover:not(:disabled){transform:translateY(-2px)}
+.rbtn:disabled{background:#444;cursor:not-allowed;box-shadow:none;transform:none}
+.acts{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.ab{padding:8px 14px;border:none;border-radius:18px;font-size:.8rem;cursor:pointer;font-weight:700;transition:.3s;color:#fff}
+.ab:hover{transform:translateY(-1px)}
+.ab:disabled{background:#444!important;cursor:not-allowed;transform:none}
+.ab.g{background:linear-gradient(45deg,#27ae60,#2ecc71)}
+.ab.r{background:linear-gradient(45deg,#e74c3c,#c0392b)}
+.ab.b{background:linear-gradient(45deg,#3498db,#2980b9)}
+.ab.o{background:linear-gradient(45deg,#f39c12,#e67e22)}
+.ab.p{background:linear-gradient(45deg,#9b59b6,#8e44ad)}
+.ab.pk{background:linear-gradient(45deg,#e91e8c,#c0196e)}
+.ibox{background:rgba(233,69,96,.1);border:1px solid #e94560;border-radius:8px;padding:8px;text-align:center;font-size:.85rem;min-height:40px;display:flex;align-items:center;justify-content:center;line-height:1.3}
+.lbox{background:rgba(255,255,255,.03);border:2px solid #1a2a3a;border-radius:10px;padding:8px;max-height:160px;overflow-y:auto}
+.lbox h3{font-size:.8rem;color:#e94560;margin-bottom:4px}
+.le{font-size:.65rem;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05);color:#bbb}
+
+.mbg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);z-index:5000;align-items:center;justify-content:center}
+.mbg.show{display:flex}
+.mdl{background:linear-gradient(135deg,#0f1a2e,#1a2a4a);border:2px solid #e94560;border-radius:15px;padding:22px;max-width:460px;width:92%;text-align:center;box-shadow:0 0 50px rgba(233,69,96,.3);animation:mp .25s ease;max-height:90vh;overflow-y:auto}
+@keyframes mp{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.mdl h2{color:#e94560;margin-bottom:8px;font-size:1.3rem}
+.mdl p{color:#ccc;margin-bottom:8px;font-size:.9rem}
+.mdl .mr{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.mdl .pd{text-align:left;background:rgba(0,0,0,.3);border-radius:8px;padding:8px;margin:8px 0}
+.mdl .dr{display:flex;justify-content:space-between;padding:2px 0;font-size:.8rem;border-bottom:1px solid rgba(255,255,255,.05)}
+.mdl .cv{border-radius:8px;padding:15px;margin:8px 0}
+.mdl .cv.ch{background:linear-gradient(135deg,#fff3e0,#ffe0b2);color:#e65100;border:3px solid #ff9800}
+.mdl .cv.co{background:linear-gradient(135deg,#e3f2fd,#bbdefb);color:#1565c0;border:3px solid #2196f3}
+.mdl .bi{display:flex;justify-content:space-between;align-items:center;padding:6px;margin:4px 0;background:rgba(0,0,0,.3);border-radius:6px}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0a1a}::-webkit-scrollbar-thumb{background:#e94560;border-radius:5px}
+
+@media(max-width:1100px){
+.game-layout{flex-direction:column;align-items:center}
+.board{grid-template-columns:repeat(11,55px);grid-template-rows:repeat(11,55px)}
+.cell .ci{font-size:.85rem}.cell .cn{font-size:.35rem}
+.panel{width:95%;max-width:600px}
+}
+</style>
+</head>
+<body>
+
+<!-- MENU SCREEN -->
+<div class="screen active" id="menuScreen">
+<div class="box">
+<h1>🎲 MONOPOLY</h1>
+<h1 style="font-size:2rem;margin-top:-5px">B A K U</h1>
+<h2>Online Multiplayer</h2>
+<input id="myName" placeholder="Adını yaz..." maxlength="15" value="">
+<br>
+<button class="bbtn main" onclick="createRoom()">🏠 YENİ OTAQ YARAT</button>
+<button class="bbtn sec" onclick="showJoin()">🔗 OTAĞA QOŞUL</button>
+<div id="joinDiv" style="display:none;margin-top:15px">
+<input id="joinCode" placeholder="Otaq kodu (5 hərf)" maxlength="5" style="text-transform:uppercase;text-align:center;font-size:1.5rem;letter-spacing:5px">
+<button class="bbtn green" onclick="joinRoom()">QOŞUL</button>
+</div>
+<div class="error-msg" id="menuError"></div>
+</div>
+</div>
+
+<!-- LOBBY SCREEN -->
+<div class="screen" id="lobbyScreen">
+<div class="box">
+<h1 style="font-size:2rem">🏠 OTAQ</h1>
+<div class="room-code" id="lobbyCode"></div>
+<p style="color:#aaa;margin-bottom:10px">Bu kodu dostlarına göndər!</p>
+<div class="player-list" id="lobbyPlayers"></div>
+<p style="color:#888;font-size:.8rem" id="lobbyStatus">Oyunçular gözlənilir... (min 2)</p>
+<button class="bbtn main" id="startBtn" onclick="startGame()" style="display:none">🎮 OYUNU BAŞLAT</button>
+</div>
+</div>
+
+<!-- GAME SCREEN -->
+<div class="screen" id="gameScreen" style="background:linear-gradient(135deg,#0a0a1a,#1a1a3e,#0a2a4a);overflow-y:auto;display:none;flex-direction:column">
+<div class="game-title">
+<h1>🎲 MONOPOLY BAKU</h1>
+<div class="rc">Otaq: <span id="gameCode"></span></div>
+</div>
+<div class="game-layout">
+<div><div class="board" id="board"></div></div>
+<div class="panel">
+<div id="pCards"></div>
+<div class="ibox" id="iBox">Oyun yüklənir...</div>
+<div class="dbox">
+<div class="drow"><div class="die" id="d1">?</div><div class="die" id="d2">?</div></div>
+<button class="rbtn" id="rBtn" onclick="doRoll()" disabled>🎲 ZƏR AT</button>
+<div class="acts" id="actA"></div>
+</div>
+<div class="lbox" id="lBox"><h3>📋 Oyun Jurnalı</h3></div>
+</div>
+</div>
+</div>
+
+<div class="mbg" id="mBg"><div class="mdl" id="mDl"></div></div>
+
+<script>
+const socket = io();
+let myIdx = -1;
+let state = null;
+let roomCode = '';
+
+const CELLS=[
+{id:0,name:"START",type:"go",icon:"🚀"},
+{id:1,name:"Buzovna",type:"prop",price:60,rent:[2,10,30,90,160,250],color:"#8B4513",group:"brown",hcost:50,icon:"🏘️"},
+{id:2,name:"Şans",type:"chance",icon:"❓"},
+{id:3,name:"Mərdəkan",type:"prop",price:60,rent:[4,20,60,180,320,450],color:"#8B4513",group:"brown",hcost:50,icon:"🏖️"},
+{id:4,name:"Vergi",type:"tax",amount:200,icon:"💰"},
+{id:5,name:"Metro 28May",type:"rail",price:200,icon:"🚇"},
+{id:6,name:"Binəqədi",type:"prop",price:100,rent:[6,30,90,270,400,550],color:"#87CEEB",group:"lblue",hcost:50,icon:"🏗️"},
+{id:7,name:"İcma",type:"community",icon:"📦"},
+{id:8,name:"Sabunçu",type:"prop",price:100,rent:[6,30,90,270,400,550],color:"#87CEEB",group:"lblue",hcost:50,icon:"🏭"},
+{id:9,name:"Zabrat",type:"prop",price:120,rent:[8,40,100,300,450,600],color:"#87CEEB",group:"lblue",hcost:50,icon:"🏘️"},
+{id:10,name:"HƏBS",type:"jail",icon:"🔒"},
+{id:11,name:"Xətai",type:"prop",price:140,rent:[10,50,150,450,625,750],color:"#FF69B4",group:"pink",hcost:100,icon:"🏢"},
+{id:12,name:"SOCAR",type:"util",price:150,icon:"⚡"},
+{id:13,name:"Nərimanov",type:"prop",price:140,rent:[10,50,150,450,625,750],color:"#FF69B4",group:"pink",hcost:100,icon:"🏬"},
+{id:14,name:"H.Aslanov",type:"prop",price:160,rent:[12,60,180,500,700,900],color:"#FF69B4",group:"pink",hcost:100,icon:"🏠"},
+{id:15,name:"Metro Gənclik",type:"rail",price:200,icon:"🚇"},
+{id:16,name:"Yasamal",type:"prop",price:180,rent:[14,70,200,550,750,950],color:"#FFA500",group:"orange",hcost:100,icon:"🏘️"},
+{id:17,name:"İcma",type:"community",icon:"📦"},
+{id:18,name:"Nəsimi",type:"prop",price:180,rent:[14,70,200,550,750,950],color:"#FFA500",group:"orange",hcost:100,icon:"🏙️"},
+{id:19,name:"Səbail",type:"prop",price:200,rent:[16,80,220,600,800,1000],color:"#FFA500",group:"orange",hcost:100,icon:"⛵"},
+{id:20,name:"PULSUZ PARK",type:"free",icon:"🅿️"},
+{id:21,name:"Nizami küç.",type:"prop",price:220,rent:[18,90,250,700,875,1050],color:"#FF0000",group:"red",hcost:150,icon:"🛍️"},
+{id:22,name:"Şans",type:"chance",icon:"❓"},
+{id:23,name:"Torqovı",type:"prop",price:220,rent:[18,90,250,700,875,1050],color:"#FF0000",group:"red",hcost:150,icon:"🏪"},
+{id:24,name:"Fəvvarələr",type:"prop",price:240,rent:[20,100,300,750,925,1100],color:"#FF0000",group:"red",hcost:150,icon:"⛲"},
+{id:25,name:"Metro Nəsimi",type:"rail",price:200,icon:"🚇"},
+{id:26,name:"Bulvar",type:"prop",price:260,rent:[22,110,330,800,975,1150],color:"#FFD700",group:"yellow",hcost:150,icon:"🌊"},
+{id:27,name:"Bulvar Park",type:"prop",price:260,rent:[22,110,330,800,975,1150],color:"#FFD700",group:"yellow",hcost:150,icon:"🌳"},
+{id:28,name:"Azərsu",type:"util",price:150,icon:"💧"},
+{id:29,name:"Ağ Şəhər",type:"prop",price:280,rent:[24,120,360,850,1025,1200],color:"#FFD700",group:"yellow",hcost:150,icon:"🏙️"},
+{id:30,name:"HƏBSƏ GET",type:"gotojail",icon:"🚔"},
+{id:31,name:"Flame Towers",type:"prop",price:300,rent:[26,130,390,900,1100,1275],color:"#00CC00",group:"green",hcost:200,icon:"🔥"},
+{id:32,name:"İcma",type:"community",icon:"📦"},
+{id:33,name:"H.Əliyev M.",type:"prop",price:300,rent:[26,130,390,900,1100,1275],color:"#00CC00",group:"green",hcost:200,icon:"🏛️"},
+{id:34,name:"Metro İçəri",type:"rail",price:200,icon:"🚇"},
+{id:35,name:"Şans",type:"chance",icon:"❓"},
+{id:36,name:"Qız Qalası",type:"prop",price:350,rent:[35,175,500,1100,1300,1500],color:"#0000CC",group:"blue",hcost:200,icon:"🏰"},
+{id:37,name:"Lüks Vergi",type:"tax",amount:100,icon:"💎"},
+{id:38,name:"İçərişəhər",type:"prop",price:320,rent:[28,150,450,1000,1200,1400],color:"#00CC00",group:"green",hcost:200,icon:"🕌"},
+{id:39,name:"Şirvanşahlar",type:"prop",price:400,rent:[50,200,600,1400,1700,2000],color:"#0000CC",group:"blue",hcost:200,icon:"👑"}
+];
+
+const PCOLORS=["#e94560","#3498db","#2ecc71","#f39c12"];
+const PTOKENS=["🔴","🔵","🟢","🟡"];
+
+function gpos(id){
+if(id<=10)return{r:11,c:11-id};
+if(id<=19)return{r:10-(id-11),c:1};
+if(id<=30)return{r:1,c:id-19};
+return{r:id-29,c:11};
+}
+
+function buildBoard(){
+const b=document.getElementById('board');b.innerHTML='';
+CELLS.forEach(c=>{
+const p=gpos(c.id);const d=document.createElement('div');
+d.className='cell'+(c.type==='go'||c.type==='jail'||c.type==='free'||c.type==='gotojail'?' corner':'');
+d.id='c'+c.id;d.style.gridRow=p.r;d.style.gridColumn=p.c;
+let h='';
+if(c.color)h+=`<div class="cb" style="background:${c.color}"></div>`;
+h+=`<div class="harea" id="h${c.id}"></div>`;
+h+=`<div class="ci">${c.icon||''}</div>`;
+h+=`<div class="cn">${c.name}</div>`;
+if(c.price)h+=`<div class="cp">${c.price}₼</div>`;
+if(c.type==='tax')h+=`<div class="cp">${c.amount}₼</div>`;
+h+=`<div class="tk-area" id="t${c.id}"></div>`;
+h+=`<div class="odot" id="o${c.id}"></div>`;
+d.innerHTML=h;
+d.onclick=()=>showCellInfo(c.id);
+b.appendChild(d);
+});
+const cn=document.createElement('div');cn.className='bcenter';
+cn.innerHTML='<h2>MONOPOLY</h2><p style="font-size:1.2rem;color:#f5a623">B A K U</p><p style="color:#555;font-size:.7rem;margin-top:3px">Online</p>';
+b.appendChild(cn);
+}
+
+function render(){
+if(!state)return;
+CELLS.forEach(c=>{const t=document.getElementById('t'+c.id);if(t)t.innerHTML='';});
+state.players.forEach((p,i)=>{
+if(p.dead)return;
+const t=document.getElementById('t'+p.pos);
+if(t){const d=document.createElement('div');d.className='tk';d.style.background=PCOLORS[i];d.textContent=i+1;t.appendChild(d);}
+});
+CELLS.forEach(c=>{
+const od=document.getElementById('o'+c.id);
+const hd=document.getElementById('h'+c.id);
+const oi=state.properties[c.id];
+if(od){if(oi!==undefined){od.style.display='block';od.style.background=PCOLORS[oi];}else{od.style.display='none';}}
+if(hd){
+const h=state.houses[c.id];
+if(h){hd.innerHTML=h===5?'🏨':'🏠'.repeat(h);}else{hd.innerHTML='';}
+}
+});
+const pc=document.getElementById('pCards');pc.innerHTML='';
+state.players.forEach((p,i)=>{
+if(p.dead){pc.innerHTML+=`<div class="pc" style="opacity:.4"><div class="ph"><div class="pt" style="background:${PCOLORS[i]}">${PTOKENS[i]}</div><div><div class="pn">${p.name} 💀</div><div class="pm" style="color:#e74c3c">İFLAS</div></div></div></div>`;return;}
+const act=i===state.currentPlayer;
+const you=i===myIdx;
+const propsIds=Object.entries(state.properties).filter(([id,oi])=>oi===i).map(([id])=>CELLS[id].name);
+const propsText=propsIds.join(', ')||'Yoxdur';
+pc.innerHTML+=`<div class="pc ${act?'active':''} ${you?'you':''}"><div class="ph"><div class="pt" style="background:${PCOLORS[i]}">${PTOKENS[i]}</div><div><div class="pn">${p.name}${you?' (Sən)':''}${act?' ◀':''}</div><div class="pm">${p.money}₼</div></div></div><div class="pp">🏠 ${propsText}</div>${p.jail?'<div class="pj">🔒 Həbsdə ('+p.jailTurns+'/3)</div>':''}${p.jailFree?'<div style="font-size:.6rem;color:#2ecc71">🎫 Azad: '+p.jailFree+'</div>':''}</div>`;
+});
+updateBtns();
+}
+
+function updateBtns(){
+if(!state)return;
+const rb=document.getElementById('rBtn');
+const aa=document.getElementById('actA');
+aa.innerHTML='';
+const isMyTurn=state.currentPlayer===myIdx;
+const me=state.players[myIdx];
+const cur=state.players[state.currentPlayer];
+
+if(!isMyTurn){
+rb.disabled=true;
+rb.textContent='⏳ '+cur.name+' oynayır...';
+document.getElementById('iBox').innerHTML=cur.name+"-in növbəsi. Gözlə...";
+return;
+}
+
+if(state.phase==='gameover'){
+rb.disabled=true;
+const w=state.players.find(p=>!p.dead);
+document.getElementById('iBox').innerHTML="🏆 "+w.name+" QAZANDI!";
+showModal(`<h2>🏆 TƏBRİKLƏR!</h2><p style="font-size:3rem">${PTOKENS[w.idx]}</p><p style="font-size:1.5rem;color:#f5a623;font-weight:700">${w.name} QAZANDI!</p><div class="mr"><button class="ab g" onclick="location.reload()">🔄 Yenidən</button></div>`);
+return;
+}
+
+if(state.phase==='roll'){
+rb.disabled=false;
+rb.textContent=me.jail?'ZƏR AT (Həbsdə)':'🎲 ZƏR AT';
+document.getElementById('iBox').innerHTML="🎲 Sənin növbəndir! Zər at!";
+if(me.jail){
+aa.innerHTML+=`<button class="ab o" onclick="socket.emit('pay_jail')">💰 50₼ ödə çıx</button>`;
+if(me.jailFree)aa.innerHTML+=`<button class="ab p" onclick="socket.emit('use_jail_card')">🎫 Azad kartı</button>`;
+}
+addMyBtns(aa);
+}else if(state.phase==='buy'){
+rb.disabled=true;
+const c=CELLS[me.pos];
+document.getElementById('iBox').innerHTML="🏠 "+c.name+" satılır! "+c.price+"₼";
+aa.innerHTML=`<button class="ab g" onclick="socket.emit('buy_property')">🏠 AL (${c.price}₼)</button><button class="ab r" onclick="socket.emit('skip_buy')">❌ ALMA</button>`;
+}else if(state.phase==='endturn'){
+rb.disabled=true;
+document.getElementById('iBox').innerHTML="Növbəni bitir, və ya ev tik/sat.";
+addMyBtns(aa);
+aa.innerHTML+=`<button class="ab o" onclick="socket.emit('end_turn')">➡️ Növbəni Bitir</button>`;
+}else if(state.phase==='must_sell'){
+rb.disabled=true;
+document.getElementById('iBox').innerHTML="⚠️ Borclusan! Mülk sat!";
+aa.innerHTML+=`<button class="ab pk" onclick="showSellUI()">💲 Sat</button>`;
+aa.innerHTML+=`<button class="ab r" onclick="socket.emit('go_bankrupt')">💀 İflas</button>`;
+}
+}
+
+function addMyBtns(aa){
+if(!state)return;
+const myProps=Object.entries(state.properties).filter(([id,oi])=>oi===myIdx);
+// Check buildable
+let canBuild=false;
+const groups={};
+myProps.forEach(([id])=>{const c=CELLS[id];if(c.group){if(!groups[c.group])groups[c.group]=[];groups[c.group].push(parseInt(id));}});
+Object.keys(groups).forEach(gr=>{
+const gc=CELLS.filter(c=>c.group===gr);
+if(groups[gr].length===gc.length){
+groups[gr].forEach(id=>{
+const h=state.houses[id]||0;
+if(h<5&&state.players[myIdx].money>=CELLS[id].hcost)canBuild=true;
+});
+}
+});
+if(canBuild)aa.innerHTML+=`<button class="ab b" onclick="showBuildUI()">🏗️ Ev Tik</button>`;
+if(myProps.length>0)aa.innerHTML+=`<button class="ab pk" onclick="showSellUI()">💲 Sat</button>`;
+}
+
+function doRoll(){socket.emit('roll_dice');}
+
+function log(m){const l=document.getElementById('lBox');const d=document.createElement('div');d.className='le';d.textContent=m;if(l.children.length>1)l.insertBefore(d,l.children[1]);else l.appendChild(d);if(l.children.length>60)l.removeChild(l.lastChild);}
+
+// ===== BUILD UI =====
+function showBuildUI(){
+if(!state)return;
+const myProps=Object.entries(state.properties).filter(([id,oi])=>oi===myIdx).map(([id])=>parseInt(id));
+const groups={};
+myProps.forEach(id=>{const c=CELLS[id];if(c.group){if(!groups[c.group])groups[c.group]=[];groups[c.group].push(id);}});
+let html='<h2>🏗️ Ev / Hotel Tik</h2>';
+let any=false;
+Object.keys(groups).forEach(gr=>{
+const gc=CELLS.filter(c=>c.group===gr);
+if(groups[gr].length===gc.length){
+groups[gr].forEach(id=>{
+const c=CELLS[id];const h=state.houses[id]||0;
+if(h<5&&state.players[myIdx].money>=c.hcost){
+const label=h<4?`${h}→${h+1} ev`:'🏨 Hotel';
+html+=`<div class="bi"><span>${c.icon} ${c.name} (${label})</span><button class="ab g" onclick="socket.emit('build_house',{cellId:${id}});closeModal()" style="margin:0">${c.hcost}₼</button></div>`;
+any=true;
+}
+});
+}
+});
+if(!any)html+='<p>Tikə biləcəyin mülk yoxdur.</p>';
+html+=`<div class="mr"><button class="ab r" onclick="closeModal()">Bağla</button></div>`;
+showModal(html);
+}
+
+// ===== SELL UI =====
+function showSellUI(){
+if(!state)return;
+const myProps=Object.entries(state.properties).filter(([id,oi])=>oi===myIdx).map(([id])=>parseInt(id));
+let html='<h2>💲 Sat / Girov</h2>';
+myProps.forEach(id=>{
+const c=CELLS[id];const sp=Math.floor(c.price/2);const h=state.houses[id]||0;
+if(h>0){
+const ref=Math.floor(c.hcost/2);
+html+=`<div class="bi"><span>${c.icon} ${c.name} (${h===5?'hotel':h+' ev'})</span><button class="ab o" onclick="socket.emit('sell_house',{cellId:${id}});closeModal()" style="margin:0">Ev sök +${ref}₼</button></div>`;
+}else{
+html+=`<div class="bi"><span>${c.icon} ${c.name}</span><button class="ab o" onclick="socket.emit('sell_property',{cellId:${id}});closeModal()" style="margin:0">Sat +${sp}₼</button></div>`;
+}
+});
+html+=`<div class="mr"><button class="ab r" onclick="closeModal()">Bağla</button></div>`;
+showModal(html);
+}
+
+// ===== CELL INFO =====
+function showCellInfo(id){
+const c=CELLS[id];if(!c.price&&c.type!=='tax')return;
+let html=`<h2>${c.icon} ${c.name}</h2>`;
+if(c.color)html+=`<div style="height:8px;background:${c.color};border-radius:4px;margin:6px 0"></div>`;
+html+='<div class="pd">';
+if(c.rent){
+html+=`<div class="dr"><span>Qiymət:</span><span>${c.price}₼</span></div>`;
+c.rent.forEach((r,i)=>{const l=['Kirayə','1 ev','2 ev','3 ev','4 ev','Hotel'][i];html+=`<div class="dr"><span>${l}:</span><span>${r}₼</span></div>`;});
+html+=`<div class="dr"><span>Ev qiyməti:</span><span>${c.hcost}₼</span></div>`;
+}else if(c.type==='rail'){
+html+=`<div class="dr"><span>Qiymət:</span><span>${c.price}₼</span></div>`;
+[25,50,100,200].forEach((r,i)=>html+=`<div class="dr"><span>${i+1} metro:</span><span>${r}₼</span></div>`);
+}else if(c.type==='util'){
+html+=`<div class="dr"><span>Qiymət:</span><span>${c.price}₼</span></div><div class="dr"><span>1:</span><span>Zər×4</span></div><div class="dr"><span>2:</span><span>Zər×10</span></div>`;
+}else if(c.type==='tax'){
+html+=`<div class="dr"><span>Vergi:</span><span>${c.amount}₼</span></div>`;
+}
+html+='</div>';
+if(state){
+const oi=state.properties[id];
+if(oi!==undefined)html+=`<p style="color:${PCOLORS[oi]}">Sahib: ${state.players[oi].name}</p>`;
+else if(c.price)html+=`<p style="color:#aaa">Satılır!</p>`;
+}
+html+=`<div class="mr"><button class="ab r" onclick="closeModal()">Bağla</button></div>`;
+showModal(html);
+}
+
+function showModal(h){document.getElementById('mDl').innerHTML=h;document.getElementById('mBg').classList.add('show');}
+function closeModal(){document.getElementById('mBg').classList.remove('show');}
+
+// ===== MENU FUNCTIONS =====
+function createRoom(){
+const name=document.getElementById('myName').value.trim()||'Oyunçu';
+socket.emit('create_room',{name});
+}
+function showJoin(){document.getElementById('joinDiv').style.display='block';}
+function joinRoom(){
+const name=document.getElementById('myName').value.trim()||'Oyunçu';
+const code=document.getElementById('joinCode').value.trim().toUpperCase();
+if(code.length<4){document.getElementById('menuError').textContent='Otaq kodunu yaz!';return;}
+socket.emit('join_room',{name,code});
+}
+function startGame(){socket.emit('start_game');}
+
+function showScreen(id){
+document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.style.display='none';});
+const el=document.getElementById(id);el.classList.add('active');el.style.display='flex';
+}
+
+// ===== SOCKET EVENTS =====
+socket.on('room_created',(d)=>{
+roomCode=d.code;myIdx=d.you;state=d.state;
+showScreen('lobbyScreen');
+document.getElementById('lobbyCode').textContent=d.code;
+updateLobby(d.state);
+document.getElementById('startBtn').style.display='block';
+});
+
+socket.on('room_joined',(d)=>{
+roomCode=d.code;myIdx=d.you;state=d.state;
+showScreen('lobbyScreen');
+document.getElementById('lobbyCode').textContent=d.code;
+updateLobby(d.state);
+});
+
+socket.on('update',(d)=>{
+state=d.state;
+if(!state.started){updateLobby(state);return;}
+render();
+if(d.logs)d.logs.forEach(l=>log(l.t));
+if(d.log)log(d.log.t);
+});
+
+socket.on('game_started',(d)=>{
+state=d.state;
+showScreen('gameScreen');
+document.getElementById('gameCode').textContent=roomCode;
+buildBoard();render();
+log("🎮 Oyun başladı!");
+});
+
+socket.on('dice_result',(d)=>{
+state=d.state;
+const dots=['⚀','⚁','⚂','⚃','⚄','⚅'];
+const e1=document.getElementById('d1'),e2=document.getElementById('d2');
+e1.classList.add('rolling');e2.classList.add('rolling');
+let c=0;
+const iv=setInterval(()=>{
+e1.textContent=dots[Math.floor(Math.random()*6)];
+e2.textContent=dots[Math.floor(Math.random()*6)];
+if(++c>10){
+clearInterval(iv);
+e1.textContent=dots[d.dice[0]-1];
+e2.textContent=dots[d.dice[1]-1];
+e1.classList.remove('rolling');e2.classList.remove('rolling');
+}
+},50);
+d.logs.forEach(l=>log(l.t));
+if(d.card){
+const cls=d.card.type==='chance'?'ch':'co';
+const title=d.card.type==='chance'?'❓ Şans':'📦 İcma';
+showModal(`<div class="cv ${cls}"><h3>${title}</h3><p style="font-size:1.1rem;font-weight:700">${d.card.text}</p></div><div class="mr"><button class="ab o" onclick="closeModal()">OK</button></div>`);
+}
+setTimeout(()=>render(),700);
+});
+
+socket.on('error_msg',(msg)=>{
+document.getElementById('menuError').textContent=msg;
+setTimeout(()=>document.getElementById('menuError').textContent='',3000);
+});
+
+function updateLobby(st){
+const pl=document.getElementById('lobbyPlayers');pl.innerHTML='';
+st.players.forEach((p,i)=>{
+pl.innerHTML+=`<div><div class="dot" style="background:${PCOLORS[i]}"></div><span>${PTOKENS[i]} ${p.name}${i===myIdx?' (Sən)':''}</span></div>`;
+});
+document.getElementById('lobbyStatus').textContent=st.players.length<2?'Oyunçular gözlənilir... (min 2)':st.players.length+' oyunçu hazır!';
+}
+
+buildBoard();
+</script>
+</body>
+</html>
